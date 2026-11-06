@@ -16,17 +16,25 @@ A single-page bug-tracking dashboard prototype for reviewing defects, exploring 
 - `index.html` — page structure and external library setup.
 - `styles.css` — custom styles.
 - `app.jsx` — React app and UI logic.
+- `server.py` — Python HTTP server and JSON API.
+- `bug_tracker.sqlite3` — SQLite database created automatically when the server starts.
 
 ## Run locally
 
-From the project directory, start a local web server:
+Requires Python 3.10 or later; the backend uses only the Python standard library. From the project directory, start the app and API:
 
 ```bash
-python -m http.server 8000
+python server.py
 ```
 
-Then open [http://localhost:8000](http://localhost:8000) in a modern web browser. The page loads React, Babel, Tailwind CSS, and Lucide from public CDNs, so an internet connection is required. Serve the files over HTTP rather than opening `index.html` directly, so the browser can load `app.jsx`.
+Then open [http://localhost:8000](http://localhost:8000) in a modern web browser. The API initializes the sample bugs on first run and saves bugs, triage assignments, and diagnosis results in SQLite. The page loads React, Babel, Tailwind CSS, and Lucide from public CDNs, so an internet connection is required.
 
 ## Notes
 
-This is a front-end prototype: issue data starts from sample records and changes are kept in page memory only. Refreshing the page resets changes. AI diagnosis, triage, Gmail notifications, CI/CD workflows, and dependency information are demonstrations; they are not connected to backend services or external accounts.
+AI diagnosis, triage assignment choices, Gmail notifications, CI/CD workflows, and dependency information remain demonstrations; they are not connected to external AI, email, CI/CD, or repository services. The Python server binds to `127.0.0.1` by default and is intended for local development, not public deployment.
+
+Run the backend tests with:
+
+```bash
+python -m unittest
+```

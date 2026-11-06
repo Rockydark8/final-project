@@ -161,8 +161,22 @@ const { useState, useEffect, useMemo } = React;
       Resolved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
     };
 
+    const apiRequest = async (path, method = 'GET', data) => {
+      const response = await fetch(path, {
+        method,
+        headers: data ? { 'Content-Type': 'application/json' } : {},
+        body: data ? JSON.stringify(data) : undefined
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || `Request failed (${response.status})`);
+      }
+      return result;
+    };
+
     function App() {
       const [bugs, setBugs] = useState(INITIAL_BUGS);
+      const [apiError, setApiError] = useState('');
       const [activeTab, setActiveTab] = useState('dashboard');
       const [selectedBugId, setSelectedBugId] = useState('BUG-101');
       const [searchQuery, setSearchQuery] = useState('');
@@ -232,40 +246,45 @@ const { useState, useEffect, useMemo } = React;
       // Handle AI Diagnosis Generation
       const handleRunAiDiagnosis = (bugId) => {
         setIsAnalyzing(true);
-        setTimeout(() => {
-          setBugs(prev => prev.map(b => {
-            if (b.id === bugId) {
-              return {
-                ...b,
-                aiAnalysis: {
-                  rootCause: `Detected exception trace pattern matching missing exception boundary in module ${b.component}. Token validation failed during state transition.`,
-                  confidence: 96,
-                  fixSnippet: `# Automated Patch for ${b.id}\ntry:\n    execute_service_pipeline(component="${b.component}")\nexcept Exception as err:\n    logger.error("Handled issue: %s", err)\n    trigger_gmail_fallback_notification("${b.id}")`,
-                  severityScore: b.severity === 'Critical' ? 9.2 : 6.5
-                }
-              };
-            }
-            return b;
-          }));
-          setIsAnalyzing(false);
+        setTimeout(async () => {
+          const bug = bugs.find(item => item.id === bugId);
+          if (!bug) {
+            setIsAnalyzing(false);
+            return;
+          }
+          const aiAnalysis = {
+            rootCause: `Detected exception trace pattern matching missing exception boundary in module ${bug.component}. Token validation failed during state transition.`,
+            confidence: 96,
+            fixSnippet: `# Automated Patch for ${bug.id}\ntry:\n    execute_service_pipeline(component="${bug.component}")\nexcept Exception as err:\n    logger.error("Handled issue: %s", err)\n    trigger_gmail_fallback_notification("${bug.id}")`,
+            severityScore: bug.severity === 'Critical' ? 9.2 : 6.5
+          };
+          try {
+            const updatedBug = await apiRequest(`/api/bugs/${bugId}`, 'PATCH', { aiAnalysis });
+            setBugs(prev => prev.map(item => item.id === bugId ? updatedBug : item));
+            setApiError('');
+          } catch (error) {
+            setApiError(`Could not save analysis: ${error.message}`);
+          } finally {
+            setIsAnalyzing(false);
+          }
         }, 1200);
       };
 
       // Handle Auto Triage Action
-      const handleAutoTriage = (bugId) => {
+      const handleAutoTriage = async (bugId) => {
         const engineers = ['Alex Chen', 'Sarah Lin', 'Devon Vance', 'Elena Rostova'];
         const randomEngineer = engineers[Math.floor(Math.random() * engineers.length)];
-        
-        setBugs(prev => prev.map(b => {
-          if (b.id === bugId) {
-            return {
-              ...b,
-              status: 'In Progress',
-              assignee: randomEngineer
-            };
-          }
-          return b;
-        }));
+        try {
+          const updatedBug = await apiRequest(`/api/bugs/${bugId}`, 'PATCH', {
+            status: 'In Progress',
+            assignee: randomEngineer
+          });
+          setBugs(prev => prev.map(b => b.id === bugId ? updatedBug : b));
+          setApiError('');
+        } catch (error) {
+          setApiError(`Could not assign defect: ${error.message}`);
+          return;
+        }
 
         // Trigger Gmail Integration Dispatcher
         const newMail = {
@@ -280,27 +299,43 @@ const { useState, useEffect, useMemo } = React;
       };
 
       // Create new bug
-      const handleCreateBug = (e) => {
+      const handleCreateBug = async (e) => {
         e.preventDefault();
-        const createdId = `BUG-${100 + bugs.length + 1}`;
-        const newBugObj = {
-          id: createdId,
+        const bugData = {
           title: newBug.title,
           component: newBug.component,
           severity: newBug.severity,
-          status: 'New',
-          assignee: 'Unassigned',
-          reportedBy: 'Rockydark8 User',
-          createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
           description: newBug.description,
-          logs: newBug.logs || 'No stack trace provided by reporter.',
-          aiAnalysis: null
+          logs: newBug.logs || 'No stack trace provided by reporter.'
         };
 
-        setBugs([newBugObj, ...bugs]);
-        setIsAddModalOpen(false);
-        setNewBug({ title: '', component: 'Streamlit UI', severity: 'Medium', description: '', logs: '' });
+        try {
+          const createdBug = await apiRequest('/api/bugs', 'POST', bugData);
+          setBugs(prev => [createdBug, ...prev]);
+          setApiError('');
+          setIsAddModalOpen(false);
+          setNewBug({ title: '', component: 'Streamlit UI', severity: 'Medium', description: '', logs: '' });
+        } catch (error) {
+          setApiError(`Could not create defect: ${error.message}`);
+        }
       };
+
+      useEffect(() => {
+        let isMounted = true;
+        apiRequest('/api/bugs/initialize', 'POST', { bugs: INITIAL_BUGS })
+          .then(savedBugs => {
+            if (isMounted) {
+              setBugs(savedBugs);
+              setApiError('');
+            }
+          })
+          .catch(error => {
+            if (isMounted) {
+              setApiError(`Backend unavailable; changes cannot be saved. ${error.message}`);
+            }
+          });
+        return () => { isMounted = false; };
+      }, []);
 
       useEffect(() => {
         if (window.lucide) {
@@ -458,6 +493,12 @@ const { useState, useEffect, useMemo } = React;
                 </button>
               </div>
             </header>
+
+            {apiError && (
+              <div role="alert" className="mx-4 mt-4 sm:mx-6 rounded-lg border border-rose-800/60 bg-rose-950/50 px-4 py-3 text-xs text-rose-200">
+                {apiError}
+              </div>
+            )}
 
             {/* BODY PANELS */}
             <div className="p-4 sm:p-6 space-y-6 flex-1">
