@@ -11,9 +11,21 @@ A single-page bug-tracking dashboard prototype for reviewing defects, exploring 
 - CI/CD workflow and dependency graph views.
 - Create defects and export the current issue list as JSON.
 
+## Project files
+
+- `index.html` — page structure and external library setup.
+- `styles.css` — custom styles.
+- `app.jsx` — React app and UI logic.
+
 ## Run locally
 
-Open `rockydark8_bug_tracker (1).html` in a modern web browser. The page loads React, Babel, Tailwind CSS, and Lucide from public CDNs, so an internet connection is required.
+From the project directory, start a local web server:
+
+```bash
+python -m http.server 8000
+```
+
+Then open [http://localhost:8000](http://localhost:8000) in a modern web browser. The page loads React, Babel, Tailwind CSS, and Lucide from public CDNs, so an internet connection is required. Serve the files over HTTP rather than opening `index.html` directly, so the browser can load `app.jsx`.
 
 ## Notes
 
